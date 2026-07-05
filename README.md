@@ -508,11 +508,7 @@ g.load_edgelist("/path/to/edgelist", "people")
 
 ## SPARQL queries
 
-CogDB graphs can be queried with standard [SPARQL 1.1](https://www.w3.org/TR/sparql11-query/) — including joins, FILTER, OPTIONAL, UNION, aggregates and property paths — via an [rdflib](https://rdflib.readthedocs.io/) store adapter. SPARQL is optional; install it with:
-
-```
-pip install cogdb[sparql]
-```
+CogDB graphs can be queried with standard [SPARQL 1.1](https://www.w3.org/TR/sparql11-query/) — including joins, FILTER, OPTIONAL, UNION, aggregates and property paths — via an [rdflib](https://rdflib.readthedocs.io/) store adapter, included by default.
 
 Torque and SPARQL query the same storage. A vertex written with `put()` is addressable in SPARQL as an IRI:
 

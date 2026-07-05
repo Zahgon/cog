@@ -4,7 +4,7 @@ import unittest
 
 import pytest
 
-rdflib = pytest.importorskip("rdflib", reason="SPARQL tests require the optional rdflib dependency")
+rdflib = pytest.importorskip("rdflib", reason="SPARQL tests require rdflib")
 
 from rdflib import BNode, Literal, URIRef
 from rdflib.namespace import XSD

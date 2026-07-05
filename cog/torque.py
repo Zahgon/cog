@@ -1401,8 +1401,6 @@ class Graph(EmbeddingMixin, TraversalMixin):
         """
         Return an rdflib.Graph view over this graph.
 
-        Requires the optional rdflib dependency: pip install cogdb[sparql]
-
         The returned graph reads and writes the same storage as Torque —
         triples added through rdflib (e.g. rdf().parse(...)) are visible to
         Torque traversals and vice versa. Term conversion rules are
@@ -1425,9 +1423,11 @@ class Graph(EmbeddingMixin, TraversalMixin):
             try:
                 import rdflib
             except ImportError:
+                # rdflib ships with cogdb; this only triggers on stripped
+                # installs (e.g. pip install --no-deps).
                 raise ImportError(
-                    "RDF/SPARQL support requires the optional rdflib "
-                    "dependency. Install it with: pip install cogdb[sparql]")
+                    "rdflib is required for RDF/SPARQL support. "
+                    "Install it with: pip install rdflib")
             from cog.rdf_store import CogStore
             self._rdf_graph = rdflib.Graph(
                 store=CogStore(self),
@@ -1437,8 +1437,6 @@ class Graph(EmbeddingMixin, TraversalMixin):
     def sparql(self, query, init_bindings=None, init_ns=None):
         """
         Run a SPARQL 1.1 query against this graph.
-
-        Requires the optional rdflib dependency: pip install cogdb[sparql]
 
         Torque-written vertices are addressable as IRIs: g.put("alice",
         "follows", "bob") matches the pattern { <alice> <follows> ?x }.
@@ -1469,8 +1467,6 @@ class Graph(EmbeddingMixin, TraversalMixin):
         """
         Load an RDF document (Turtle, N-Triples, RDF/XML, JSON-LD, ...) into
         the graph using rdflib's parsers, in batch mode.
-
-        Requires the optional rdflib dependency: pip install cogdb[sparql]
 
         :param source: File path, URL, or file-like object.
         :param format: Optional rdflib format name ("turtle", "nt", "xml",
