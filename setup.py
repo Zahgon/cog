@@ -16,7 +16,13 @@ setup(
     packages=['cog'],
     install_requires=['xxhash>=3.2.0', 'simsimd>=5.0.0', 'websocket-client>=1.9.0', 'certifi'],
     extras_require={
-        'dev': ['pytest', 'pytest-cov'],
+        'dev': ['pytest', 'pytest-cov', 'rdflib>=7.0'],
+        'sparql': ['rdflib>=7.0'],
+    },
+    entry_points={
+        'rdf.plugins.store': [
+            'cogdb = cog.rdf_store:CogStore',
+        ],
     },
     python_requires='>=3.8',
     zip_safe=False,
