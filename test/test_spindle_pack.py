@@ -65,11 +65,12 @@ class TestSpindlePackRoundtrip(unittest.TestCase):
         for n in (2**63 - 1, -(2**63)):
             self.assertEqual(_roundtrip("k", n), ("k", n))
 
-    def test_int_out_of_range_raises(self):
-        with self.assertRaises(ValueError):
-            packb("k", 2**63)
-        with self.assertRaises(ValueError):
-            packb("k", -(2**63) - 1)
+    def test_int_out_of_int64_range_roundtrips(self):
+        # Ints beyond int64 use the marshal fallback and round-trip exactly.
+        for n in (2**63, -(2**63) - 1, 2**70, -(2**200)):
+            k, v = _roundtrip("k", n)
+            self.assertEqual(v, n)
+            self.assertIsInstance(v, int)
 
     def test_float(self):
         for f in (0.0, -0.0, 3.14159, -2.5e300, 1e-300):
@@ -88,11 +89,12 @@ class TestSpindlePackRoundtrip(unittest.TestCase):
         _, v = _roundtrip("k", [1.5, 2.5, 3.5])
         self.assertEqual(v, [1.5, 2.5, 3.5])
 
-    def test_list_of_ints_becomes_floats(self):
-        # Lists are encoded as a float64 array — ints widen to float.
+    def test_list_of_ints_stays_ints(self):
+        # Only all-float lists take the float64-array fast path; int lists
+        # go through the marshal fallback and keep their element types.
         _, v = _roundtrip("embedding", [1, 2, 3])
-        self.assertEqual(v, [1.0, 2.0, 3.0])
-        self.assertTrue(all(isinstance(x, float) for x in v))
+        self.assertEqual(v, [1, 2, 3])
+        self.assertTrue(all(type(x) is int for x in v))
 
     def test_empty_list(self):
         self.assertEqual(_roundtrip("k", []), ("k", []))
@@ -102,13 +104,23 @@ class TestSpindlePackRoundtrip(unittest.TestCase):
         _, v = _roundtrip("vec", arr)
         self.assertEqual(v, arr)
 
-    def test_list_with_non_numeric_raises(self):
-        with self.assertRaises(ValueError):
-            packb("k", [1.0, "x", 2.0])
+    def test_list_with_non_numeric_roundtrips(self):
+        for lst in ([1.0, "x", 2.0], ["a", "b", "c"], [1, "two", 3.0]):
+            _, v = _roundtrip("k", lst)
+            self.assertEqual(v, lst)
 
-    def test_unknown_type_falls_back_to_str(self):
-        # Documented fallback: unsupported value types are str()'d.
-        self.assertEqual(_roundtrip("k", None), ("k", "None"))
+    def test_container_types_roundtrip_exactly(self):
+        # dict/None/tuple use the marshal fallback — no silent stringification.
+        for val in (None, {"a": 1, "b": [True, None]}, (1, 2, 3)):
+            _, v = _roundtrip("k", val)
+            self.assertEqual(v, val)
+            self.assertIs(type(v), type(val))
+
+    def test_unmarshalable_type_raises(self):
+        class NotStorable:
+            pass
+        with self.assertRaises(ValueError):
+            packb("k", NotStorable())
 
 
 class TestSpindlePackInterning(unittest.TestCase):

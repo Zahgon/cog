@@ -9,6 +9,12 @@ Wire format per field:
     type 'b' (0x62): [varint length] [raw bytes]
     type 'B' (0x42): [1B]  0x01 = True, 0x00 = False
     type 'a' (0x61): [varint count] [count × 8B float64 LE]  — array of doubles
+    type 'm' (0x6d): [varint length] [marshal payload]        — container/other
+
+Type 'm' is the general fallback for values with no dedicated tag (dict, None,
+tuple, non-float lists, ints outside int64, ...). It carries a Python marshal
+payload — the same serialization the 3.x format used for every value — so any
+value a 3.x database could store round-trips exactly.
 
 Varint scheme (little-endian, used for string/bytes length prefixes):
     tag <= 0x7f         -> value = tag                       (1 byte total)
@@ -18,8 +24,13 @@ Varint scheme (little-endian, used for string/bytes length prefixes):
 
 All multi-byte fields use little-endian throughout.
 """
+import marshal
 import struct
 import sys
+
+# Pin the marshal wire version so 'm' payloads stay byte-stable across
+# Python releases (version 4 is the default since Python 3.4).
+_MARSHAL_VERSION = 4
 
 # Pre-compiled struct formatters for hot-path numeric fields.
 _pack_i64 = struct.Struct('<q').pack
@@ -79,27 +90,33 @@ def _encode_field(f):
     if type(f) is bool:
         return b'B\x01' if f else b'B\x00'
     if type(f) is int:
-        if f < -9223372036854775808 or f > 9223372036854775807:
-            raise ValueError(
-                "integer value out of int64 range [-2^63, 2^63-1]: " + str(f)
-            )
-        return b'i' + _pack_i64(f)
+        if -9223372036854775808 <= f <= 9223372036854775807:
+            return b'i' + _pack_i64(f)
+        return _encode_marshal_field(f)  # bigger than int64 — exact via marshal
     if type(f) is float:
         return b'f' + _pack_f64(f)
     if type(f) is bytes:
         return b'b' + _encode_varint(len(f)) + f
     if type(f) is list:
-        n = len(f)
-        for i, elem in enumerate(f):
-            if type(elem) is not int and type(elem) is not float:
-                raise ValueError(
-                    "list elements must be numeric (int or float), "
-                    "got " + type(elem).__name__ + " at index " + str(i)
-                )
-        payload = struct.pack(f'<{n}d', *f)
-        return b'a' + _encode_varint(n) + payload
-    b = str(f).encode('utf-8')
-    return b's' + _encode_varint(len(b)) + b
+        # All-float lists (embeddings) get the compact fixed-width array
+        # encoding; anything else (ints, strings, mixed) round-trips exactly
+        # through the marshal fallback — packing ints as float64 would
+        # silently change their type.
+        if all(type(elem) is float for elem in f):
+            payload = struct.pack(f'<{len(f)}d', *f)
+            return b'a' + _encode_varint(len(f)) + payload
+        return _encode_marshal_field(f)
+    return _encode_marshal_field(f)
+
+
+def _encode_marshal_field(f):
+    """Fallback encoding for types without a dedicated tag (dict, None,
+    tuple, ...). Never silently degrades: unrepresentable values raise."""
+    try:
+        payload = marshal.dumps(f, _MARSHAL_VERSION)
+    except Exception:
+        raise ValueError("unsupported value type: " + type(f).__name__)
+    return b'm' + _encode_varint(len(payload)) + payload
 
 
 def _decode_field(buf, offset):
@@ -166,6 +183,8 @@ def _decode_field(buf, offset):
 
     if t == 0x62:  # 'b'
         return buf[offset:end], end
+    if t == 0x6d:  # 'm' — marshal fallback (containers, None, big ints, ...)
+        return marshal.loads(bytes(buf[offset:end])), end
     return buf[offset:end].decode('utf-8'), end
 
 
