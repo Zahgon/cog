@@ -1,15 +1,3 @@
-"""Migrate CogDB 3.x (legacy marshal-based) databases to 4.x (Spindle format).
-
-Usage:
-    from cog.migrate import migrate
-    migrate("/path/to/cog-data")
-
-The function walks the database directory, converts all legacy store files to
-Spindle format and rebuilds the accompanying index files.  Original files are
-renamed to *.v3_backup so the operation is reversible.
-
-Files that are already in Spindle format are silently skipped.
-"""
 
 import marshal
 import os
@@ -21,22 +9,11 @@ from cog import spindle_pack
 from cog.config import INDEX_BLOCK_LEN as _NEW_INDEX_BLOCK_LEN, INDEX_CAPACITY as _NEW_INDEX_CAPACITY
 from cog.core import cog_hash
 
-# ---------------------------------------------------------------------------
-# Legacy constants (duplicated here so the migrate module is self-contained
-# and doesn't require the removed LegacyCodec class).
-# ---------------------------------------------------------------------------
 _RECORD_SEP = b'\xFD'
 _UNIT_SEP = b'\xAC'
 _LEGACY_KEY_LINK_LEN = 16
 _LEGACY_INDEX_BLOCK_LEN = 32
 
-# Legacy torque encoded directional graph edge keys as string suffixes on the
-# vertex id ("alice__:out:__"). v4 torque (cog.database.out_nodes/in_nodes)
-# uses a 1-byte direction prefix on utf-8 bytes (b'\x00alice'). These keys hash
-# to different slots and are different key values, so a faithful byte-for-byte
-# migration would leave graph edges unreachable. Rewrite them here so migrated
-# graphs are traversable. Non-edge keys (node-set, edge-set, plain KV) never
-# carry these suffixes and are left untouched.
 _LEGACY_OUT_SUFFIX = "__:out:__"
 _LEGACY_IN_SUFFIX = "__:in:__"
 _OUT_PREFIX = b'\x00'
@@ -68,9 +45,6 @@ def _read_exactly(fh, n):
     return data
 
 
-# ---------------------------------------------------------------------------
-# Legacy record reader
-# ---------------------------------------------------------------------------
 
 def _read_legacy_record(fh):
     """Read one legacy record from *fh*, returning (position, fields) or None
@@ -85,7 +59,6 @@ def _read_legacy_record(fh):
         return None
 
     key_link = int(header[0:_LEGACY_KEY_LINK_LEN])
-    # header[16] = format_version byte ('0' or '1'), ignored
     value_type = chr(header[17])
     if value_type not in ('s', 'l', 'u'):
         return None
@@ -128,9 +101,6 @@ def _read_legacy_record(fh):
     return (pos, key, value, value_type, key_link, value_link)
 
 
-# ---------------------------------------------------------------------------
-# Store migration
-# ---------------------------------------------------------------------------
 
 def _migrate_store(legacy_path):
     """Convert a single legacy store file to Spindle format.
@@ -158,8 +128,6 @@ def _migrate_store(legacy_path):
                 break
             old_pos, key, value, value_type, old_key_link, old_value_link = result
 
-            # Rewrite legacy graph edge keys to the v4 byte-prefix encoding so
-            # migrated graphs remain traversable (see _migrate_edge_key).
             key = _migrate_edge_key(key)
 
             new_key_link = pos_map.get(old_key_link, -1) if old_key_link != -1 else -1
@@ -193,9 +161,6 @@ def _migrate_store(legacy_path):
     return pos_map
 
 
-# ---------------------------------------------------------------------------
-# Index migration
-# ---------------------------------------------------------------------------
 
 def _migrate_index(index_path, migrated_store_path):
     """Rebuild an index file from the migrated Spindle store.
@@ -216,9 +181,6 @@ def _migrate_index(index_path, migrated_store_path):
         )
     capacity = legacy_size // _LEGACY_INDEX_BLOCK_LEN
 
-    # Prepare an empty new-format index in memory, then populate by walking
-    # the migrated store and appending each record into its slot chain. This
-    # replicates Index.put without needing to open an Index instance.
     slots = bytearray(capacity * block_len)
 
     codec = SpindleCodec(created_at=None)
@@ -238,9 +200,6 @@ def _migrate_index(index_path, migrated_store_path):
             offset = slot * block_len
             existing_head = struct.unpack_from('<q', slots, offset)[0]
 
-            # New record becomes the slot's head; its key_link points to the
-            # previous head (which may be same-key or a collision — readers
-            # walk key_link until they find a matching key).
             new_key_link = existing_head if existing_head != 0 else -1
             after_record = sf.tell()
             sf.seek(pos)
@@ -253,9 +212,6 @@ def _migrate_index(index_path, migrated_store_path):
         dst.write(bytes(slots))
 
 
-# ---------------------------------------------------------------------------
-# Atomic swap helpers
-# ---------------------------------------------------------------------------
 
 def _swap_files(original, tmp_suffix='.v4_tmp', backup_suffix='.v3_backup'):
     """Rename original -> backup, tmp -> original."""
@@ -275,9 +231,6 @@ def _cleanup_temps(directory):
             os.remove(os.path.join(directory, f))
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 STORE_MARKER = '-store-'
 INDEX_MARKER = '-index-'
@@ -310,7 +263,6 @@ def migrate(db_path, remove_backups=False):
         ns_dir = os.path.join(db_path, ns_entry)
         if not os.path.isdir(ns_dir):
             continue
-        # Skip system directories
         if ns_entry in ('sys', 'views'):
             continue
 
@@ -353,11 +305,6 @@ def migrate(db_path, remove_backups=False):
             idx_ok = True
             migrated_store_path = store_path + '.v4_tmp'
 
-            # Sort index paths so index-0 comes first.  The rebuild walks
-            # the entire migrated store and inserts every key, so a single
-            # index-0 file is sufficient.  Extra legacy index files (from
-            # the old multi-index Indexer) are renamed to .v3_backup
-            # without producing replacements.
             idx_paths.sort()
             primary_idx = None
             extra_idxs = []
@@ -380,13 +327,11 @@ def migrate(db_path, remove_backups=False):
                 _cleanup_temps(ns_dir)
                 continue
 
-            # All files for this table converted — swap atomically
             _swap_files(store_path)
             stats['stores_migrated'] += 1
             if primary_idx is not None:
                 _swap_files(primary_idx)
                 stats['indexes_migrated'] += 1
-            # Rename extra legacy index files to .v3_backup (no replacement)
             for idx_path in extra_idxs:
                 backup = idx_path + '.v3_backup'
                 if os.path.exists(backup):

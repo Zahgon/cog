@@ -380,37 +380,7 @@ def build_graph_html(graph_data, dark=False):
 
 
 def _iframe_srcdoc(graph_data, container_id, width, height, dark=False):
-    """
-    Build a minimal self-contained HTML page suitable for use as an
-    ``<iframe srcdoc="...">`` value.  The page loads D3 via a normal
-    ``<script src>`` tag (which works inside an iframe but *not* inside
-    Jupyter's ``display(HTML(...))``).
-    """
-    bg = "#0f172a" if dark else "#ffffff"
-    safe_json = json.dumps(graph_data or {"nodes": [], "links": []}) \
-        .replace('<', '\\u003c').replace('>', '\\u003e')
-
-    return """<!DOCTYPE html>
-<html><head><meta charset="utf-8"/>
-<style>
-  body {{ margin:0; padding:0; font-family: system-ui, -apple-system, sans-serif; }}
-  #{cid} {{ position:relative; width:{w}px; height:{h}px;
-            background:{bg}; overflow:hidden; }}
-</style>
-<script src="{cdn}"></script>
-</head><body>
-<div id="{cid}"></div>
-<script>
-  var cogContainer = document.getElementById("{cid}");
-  var graphData = {data};
-  {theme}
-  {viz}
-</script>
-</body></html>""".format(
-        cid=container_id, w=width, h=height, bg=bg,
-        cdn=D3_CDN, data=safe_json,
-        theme=_theme_js(dark), viz=_d3_graph_js()
-    )
+    pass
 
 
 class View(object):
@@ -421,153 +391,17 @@ class View(object):
         self.graph_data = graph_data
 
     def render(self, height=500, width=700, dark=False):
-        """
-        Render the graph view.
-
-        Automatically detects the environment:
-        - Google Colab / Jupyter notebook – renders the graph in the notebook.
-        - Terminal / script – opens the graph in the default web browser. Falls back to printing the file path on headless servers.
-
-        :param height: Height of the rendered view in pixels.
-        :param width: Width of the rendered view in pixels.
-        :param dark: If True, use dark background theme.
-        :return: None
-        """
-        container_id = "cog-graph-" + uuid.uuid4().hex[:8]
-        bg = "#0f172a" if dark else "#ffffff"
-
-        # --- Detect environment ---
-        _in_colab = False
-        _in_notebook = False
-
-        try:
-            import google.colab  # noqa: F401
-            _in_colab = True
-        except ImportError:
-            pass
-
-        if not _in_colab:
-            try:
-                shell = get_ipython().__class__.__name__  # noqa: F821
-                _in_notebook = (shell == "ZMQInteractiveShell")
-            except NameError:
-                pass  # not in IPython at all
-
-        # --- Colab path ---
-        if _in_colab:
-            from IPython.core.display import display, HTML
-            from google.colab import output as colab_output
-
-            graph_json = json.dumps(self.graph_data or {"nodes": [], "links": []})
-            safe_json = graph_json.replace('<', '\\u003c').replace('>', '\\u003e')
-
-            display(HTML(
-                '<div id="{cid}" '
-                'style="position:relative;width:{w}px;height:{h}px;'
-                'background:{bg};border-radius:8px;overflow:hidden;">'
-                '</div>'.format(cid=container_id, w=width, h=height, bg=bg)
-            ))
-
-            colab_js = """
-            (function() {{
-                var script = document.createElement("script");
-                script.src = "{cdn}";
-                document.head.appendChild(script);
-                script.onload = function() {{
-                    var cogContainer = document.getElementById("{cid}");
-                    var graphData = {data};
-                    {theme}
-                    {viz}
-                }};
-            }})();
-            """.format(cdn=D3_CDN, cid=container_id,
-                       data=safe_json,
-                       theme=_theme_js(dark), viz=_d3_graph_js())
-
-            colab_output.eval_js(colab_js)
-
-        # --- Jupyter notebook path ---
-        elif _in_notebook:
-            import warnings
-            from IPython.core.display import display, HTML
-
-            html_content = _iframe_srcdoc(self.graph_data, container_id,
-                                          width, height, dark=dark)
-            # Escape for embedding inside an HTML attribute
-            escaped = html_content.replace('&', '&amp;').replace('"', '&quot;')
-
-            iframe_tag = (
-                '<iframe srcdoc="{doc}" '
-                'width="{w}" height="{h}" '
-                'style="border:none;border-radius:8px;"'
-                '></iframe>'
-            ).format(doc=escaped, w=width, h=height)
-
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore", message="Consider using IPython.display.IFrame"
-                )
-                display(HTML(iframe_tag))
-
-        # --- Terminal / script path ---
-        else:
-            import tempfile
-            import webbrowser
-
-            html_content = build_graph_html(
-                self.graph_data or {"nodes": [], "links": []}, dark=dark
-            )
-            tmp = tempfile.NamedTemporaryFile(
-                suffix=".html", delete=False, mode="w", encoding="utf-8"
-            )
-            tmp.write(html_content)
-            tmp.close()
-
-            try:
-                webbrowser.open("file://" + tmp.name)
-            except webbrowser.Error:
-                print("Graph saved to: " + tmp.name)
+        pass
 
     def show(self, height=500, width=700, dark=False):
-        """
-        Convenience alias for :meth:`render`.
-
-        Renders the graph view inline in a Jupyter or Google Colab
-        notebook. Equivalent to calling ``view.render(height, width)``.
-
-        :param height: Height of the rendered view in pixels.
-        :param width: Width of the rendered view in pixels.
-        :param dark: If True, use dark background theme.
-        :return: None
-        """
-        return self.render(height=height, width=width, dark=dark)
+        pass
 
     def persist(self, path=None):
-        """
-        Save the view HTML to a file.
-
-        :param path: Optional override path. Defaults to ``self.url``.
-        """
-        target = path or self.url
-        if target:
-            with open(target, "w") as f:
-                f.write(self.html)
+        pass
 
     @staticmethod
     def extract_graph_data(html):
-        """
-        Extract graph data JSON from a persisted view HTML file.
-
-        :param html: HTML string from a persisted view.
-        :return: dict with ``nodes`` and ``links``, or None if not found.
-        """
-        m = re.search(r'var graphData\s*=\s*(\{.*?\});', html, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(1))
-            except (json.JSONDecodeError, ValueError):
-                return None
-        return None
+        pass
 
     def __str__(self):
         return self.url

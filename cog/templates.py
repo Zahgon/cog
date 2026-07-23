@@ -1,8 +1,3 @@
-"""
-CogDB Server HTML Templates
-============================
-HTML templates for the CogDB HTTP server admin pages.
-"""
 
 import html
 
@@ -13,7 +8,6 @@ def _escape(s):
         return s
     return html.escape(str(s), quote=True)
 
-# ASCII logo used in both pages
 ASCII_LOGO = """ ██████╗ ██████╗  ██████╗ ██████╗ ██████╗ 
 ██╔════╝██╔═══██╗██╔════╝ ██╔══██╗██╔══██╗
 ██║     ██║   ██║██║  ███╗██║  ██║██████╔╝
@@ -21,7 +15,6 @@ ASCII_LOGO = """ ██████╗ ██████╗  ██████
 ╚██████╗╚██████╔╝╚██████╔╝██████╔╝██████╔╝
  ╚═════╝ ╚═════╝  ╚═════╝ ╚═════╝ ╚═════╝ """
 
-# Common styles used across pages
 COMMON_STYLES = """
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
@@ -110,8 +103,6 @@ def render_index_page(version, local_ip, port, graphs_html, uptime_str, share_ur
     Returns:
         Complete HTML string for the index page
     """
-    # Use share URL if available, otherwise local address
-    # Escape user-controlled values to prevent XSS
     if share_url:
         address_display = _escape(share_url.rstrip('/'))
         connect_url = f"{_escape(share_url.rstrip('/'))}/&lt;graph&gt;"
@@ -238,7 +229,6 @@ def render_status_page(version, local_ip, port, graph_name, instance_id,
         Complete HTML string for the status page
     """
     safe_graph_name = _escape(graph_name)
-    # Use share URL if available, otherwise local address
     if share_url:
         connect_url = f"{_escape(share_url.rstrip('/'))}/{safe_graph_name}"
     else:

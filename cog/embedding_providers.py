@@ -1,4 +1,3 @@
-"""Embedding provider functions for g.vectorize()."""
 import json
 import ssl
 import urllib.request
@@ -7,10 +6,8 @@ from . import config as cfg
 
 logger = logging.getLogger(__name__)
 
-# Default timeout for HTTP requests (seconds)
 _REQUEST_TIMEOUT = 30
 
-# Lazy-loaded SSL context (certifi may not be installed in all environments)
 _SSL_CONTEXT = None
 
 

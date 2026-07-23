@@ -1,9 +1,3 @@
-"""
-Export utilities for CogDB graphs.
-
-Provides functions to extract triples from a graph and export them
-to files in various formats (N-Triples, CSV, TSV).
-"""
 import csv as csv_module
 from cog.database import out_nodes
 
@@ -30,11 +24,9 @@ def _to_nt_term(term, position="object"):
     if _is_iri(term) or _is_blank_node(term):
         return term
     if position in ("subject", "predicate"):
-        # Escape characters that would break IRI syntax
         escaped = term.replace("\\", "\\\\").replace(">", "%3E")
         return "<{}>".format(escaped)
     else:
-        # Escape backslashes, quotes, newlines, carriage returns per spec
         escaped = (term
                    .replace("\\", "\\\\")
                    .replace('"', '\\"')
@@ -59,18 +51,15 @@ def get_triples(graph):
             print(s, p, o)
     """
     graph.cog.use_namespace(graph.graph_name)
-    # Scan all vertices
     graph.cog.use_table(graph.config.GRAPH_NODE_SET_TABLE_NAME)
     vertices = [r.key for r in graph.cog.scanner()]
 
-    # Collect valid predicate hashes (skip internal tables)
     internal = (graph.config.GRAPH_NODE_SET_TABLE_NAME, graph.config.GRAPH_EDGE_SET_TABLE_NAME)
     predicates = [
         (ph, graph._predicate_reverse_lookup_cache.get(ph, ph))
         for ph in graph.all_predicates if ph not in internal
     ]
 
-    # For each predicate, check outgoing edges from each vertex
     for pred_hash, predicate_name in predicates:
         for vertex in vertices:
             record = graph.cog.use_table(pred_hash).get(out_nodes(vertex))

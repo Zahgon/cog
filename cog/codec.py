@@ -1,34 +1,8 @@
-"""Record codecs for CogDB on-disk format.
-
-Spindle (on-disk version 2): binary header + spindle_pack payload + per-record
-int64 ns timestamp.
-
-Spindle layout:
-
-    File header (offset 0, 23 bytes):
-        [magic 6]'COGDB\\x00'  [version 1]0x02  [created_at 8 int64 LE]  [reserved 8 zeros]
-
-    Record (little-endian, no separators):
-        [key_link 8 int64]  [value_type 1]  [timestamp 8 int64]
-        [value_len varint 1..5]  [payload N bytes spindle_pack (key,value)]
-        [value_link 8 int64]   -- only if value_type is list (0x01) or set (0x02)
-
-The payload uses cog.spindle_pack. Payloads are length-addressable via the outer value_len varint; spindle_pack does not
-carry its own length field for the fast-path value.
-
-Varint scheme (little-endian):
-    tag <= 0x7f              -> value = tag                        (1 byte)
-    tag == 0xcc              -> value = next uint8                 (2 bytes)
-    tag == 0xcd              -> value = next uint16 little-endian  (3 bytes)
-    tag == 0xce              -> value = next uint32 little-endian  (5 bytes)
-"""
 import struct
 import time
 
 from cog.spindle_pack import _encode_varint, _decode_varint, packb, unpackb
 
-# Lazy import to avoid circular dependency at module load time.
-# Resolved on first call to SpindleCodec.decode_at().
 _Record = None
 
 
@@ -44,7 +18,6 @@ _V2_BYTE_TO_CHAR = {V2_VALUE_TYPE_STR: 's', V2_VALUE_TYPE_LIST: 'l', V2_VALUE_TY
 _V2_CHAR_TO_BYTE = {'s': V2_VALUE_TYPE_STR, 'l': V2_VALUE_TYPE_LIST, 'u': V2_VALUE_TYPE_SET}
 
 
-# Varint tag -> number of extra bytes after the tag.
 _VARINT_EXTRA = {0xcc: 1, 0xcd: 2, 0xce: 4}
 
 
@@ -65,13 +38,10 @@ def _read_exactly(fh, n):
 
 
 class SpindleCodec:
-    """Binary length-addressable format with file header and per-record timestamps."""
     VERSION = 2
     HEADER_SIZE = V2_HEADER_SIZE
 
     def __init__(self, created_at=None):
-        # None means this codec was attached to a brand-new file that has not
-        # had its header written yet. write_header() will stamp time.time_ns().
         self.created_at = created_at
 
     def write_header(self, fh):
@@ -143,7 +113,6 @@ class SpindleCodec:
         return rec, end
 
     def read_record(self, fh):
-        # Fixed 17 bytes: key_link(8) + value_type(1) + timestamp(8)
         header = _read_exactly(fh, 17)
         if header is None or len(header) < 17:
             return None
@@ -152,8 +121,6 @@ class SpindleCodec:
             return None
         value_type = _V2_BYTE_TO_CHAR[vtype_byte]
 
-        # Read varint: peek at tag to determine total size, then delegate
-        # to _decode_varint for the actual value.
         tag = _read_exactly(fh, 1)
         if tag is None:
             return None
@@ -185,8 +152,7 @@ class SpindleCodec:
         return header + varint_buf + payload + tail
 
     def update_key_link(self, fh, pos, new_link):
-        fh.seek(pos)
-        fh.write(self.key_link_bytes(new_link))
+        pass
 
     def key_link_bytes(self, new_link):
         if type(new_link) is not int:

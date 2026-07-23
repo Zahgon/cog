@@ -4,7 +4,6 @@ from collections import OrderedDict
 
 DEFAULT_MAX_SIZE = 100000
 
-# LRU cache for Store record lookups by position.
 class StoreCache:
 
     def __init__(self, cache_id, shared_cache=None, max_size=DEFAULT_MAX_SIZE):
@@ -44,11 +43,7 @@ class StoreCache:
         return self.cache.get(key)
 
     def evict(self, key):
-        key = int(key)
-        try:
-            del self.cache[key]
-        except KeyError:
-            pass
+        pass
 
     def size(self):
-        return len(self.cache)
+        pass

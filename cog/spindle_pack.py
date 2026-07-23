@@ -1,33 +1,11 @@
-"""
-Binary packer for key-value pairs.
-
-Wire format per field:
-    [type 1B]
-    type 's' (0x73): [varint length] [utf-8 bytes]
-    type 'i' (0x69): [8B int64 LE]               — struct.pack('<q')
-    type 'f' (0x66): [8B float64 LE]              — struct.pack('<d')
-    type 'b' (0x62): [varint length] [raw bytes]
-    type 'B' (0x42): [1B]  0x01 = True, 0x00 = False
-    type 'a' (0x61): [varint count] [count × 8B float64 LE]  — array of doubles
-
-Varint scheme (little-endian, used for string/bytes length prefixes):
-    tag <= 0x7f         -> value = tag                       (1 byte total)
-    tag == 0xcc         -> value = next uint8                (2 bytes total)
-    tag == 0xcd         -> value = next uint16 little-endian (3 bytes total)
-    tag == 0xce         -> value = next uint32 little-endian (5 bytes total)
-
-All multi-byte fields use little-endian throughout.
-"""
 import struct
 import sys
 
-# Pre-compiled struct formatters for hot-path numeric fields.
 _pack_i64 = struct.Struct('<q').pack
 _unpack_i64 = struct.Struct('<q').unpack_from
 _pack_f64 = struct.Struct('<d').pack
 _unpack_f64 = struct.Struct('<d').unpack_from
 
-# Varint helpers (same scheme as codec.py, duplicated to avoid import coupling).
 _pack_u16le = struct.Struct('<H').pack
 _pack_u32le = struct.Struct('<I').pack
 _unpack_u16le = struct.Struct('<H').unpack_from
@@ -140,7 +118,6 @@ def _decode_field(buf, offset):
             raise ValueError("truncated buffer: float64 at offset " + str(offset))
         return _unpack_f64(buf, offset)[0], offset + 8
 
-    # Variable-length: read varint, then payload.
     length, vsize = _decode_varint(buf, offset)
     offset += vsize
 
@@ -178,8 +155,6 @@ def unpackb(buf):
     """Deserialize bytes to a (key, value) pair."""
     key, offset = _decode_field(buf, 0)
     value, _ = _decode_field(buf, offset)
-    # Intern strings so identical keys/values share one object in memory,
-    # turning == comparisons into fast pointer checks in bucket walks.
     if type(key) is str:
         key = sys.intern(key)
     if type(value) is str:
